@@ -1,0 +1,1261 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+background.js
+content.js
+icon.svg
+manifest.json
+overlay.css
+overlay.html
+overlay.js
+popup.css
+popup.html
+popup.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="background.js">
+// Default sites
+const DEFAULT_SITES = [
+    'facebook.com',
+    'twitter.com',
+    'x.com',
+    'instagram.com',
+    'youtube.com',
+    'reddit.com',
+    'tiktok.com'
+  ];
+
+  // Track tabs that have already shown the timer
+  const processedTabs = new Set();
+
+  // Initialize storage with default sites
+  chrome.runtime.onInstalled.addListener(async () => {
+    const result = await chrome.storage.sync.get(['mindfulSites']);
+    if (!result.mindfulSites) {
+      await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
+    }
+  });
+
+  // Get the current list of mindful sites
+  async function getMindfulSites() {
+    const result = await chrome.storage.sync.get(['mindfulSites']);
+    return result.mindfulSites || DEFAULT_SITES;
+  }
+
+  // Check if a URL matches any mindful site
+  function matchesMindfulSite(url, mindfulSites) {
+    const hostname = url.hostname.replace('www.', '').toLowerCase();
+    return mindfulSites.some(site => {
+      const pattern = site.toLowerCase().replace('www.', '');
+      // Support wildcards
+      if (pattern.includes('*')) {
+        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        return regex.test(hostname);
+      }
+      // Check if hostname includes the pattern
+      return hostname.includes(pattern) || hostname === pattern;
+    });
+  }
+
+  // Listen for navigation events
+  chrome.webNavigation.onCommitted.addListener(async (details) => {
+    // Only process main frame navigations
+    if (details.frameId !== 0) return;
+
+    // Check if we've already processed this tab
+    const tabKey = `${details.tabId}-${details.url}`;
+    if (processedTabs.has(tabKey)) {
+      processedTabs.delete(tabKey);
+      return;
+    }
+
+    try {
+      const url = new URL(details.url);
+      const mindfulSites = await getMindfulSites();
+
+      // Check if this is a mindful site
+      if (matchesMindfulSite(url, mindfulSites)) {
+        // Inject the content script
+        await chrome.scripting.executeScript({
+          target: { tabId: details.tabId },
+          files: ['content.js'],
+          injectImmediately: true
+        });
+
+        // Mark this tab as processed
+        processedTabs.add(tabKey);
+      }
+    } catch (error) {
+      console.error('Error processing navigation:', error);
+    }
+  });
+
+  // Clean up processed tabs when they're closed
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    const keysToRemove = [];
+    for (const key of processedTabs) {
+      if (key.startsWith(`${tabId}-`)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => processedTabs.delete(key));
+  });
+</file>
+
+<file path="content.js">
+(function() {
+    if (window.mindfulBrowsingInjected) return;
+    window.mindfulBrowsingInjected = true;
+
+    async function injectOverlay() {
+      if (!document.body) {
+        setTimeout(injectOverlay, 10);
+        return;
+      }
+
+      // Get settings
+      const result = await chrome.storage.sync.get(['settings']);
+      const settings = {
+        timerDuration: 5,
+        showSkipButton: true,
+        gradientStart: '#667eea',
+        gradientEnd: '#764ba2',
+        ...result.settings
+      };
+
+      // Create iframe with settings as URL parameters
+      const iframe = document.createElement('iframe');
+      iframe.id = 'mindful-overlay-iframe';
+      const params = new URLSearchParams({
+        duration: settings.timerDuration,
+        showSkip: settings.showSkipButton,
+        gradientStart: settings.gradientStart,
+        gradientEnd: settings.gradientEnd
+      });
+      iframe.src = chrome.runtime.getURL(`overlay.html?${params.toString()}`);
+      iframe.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        z-index: 2147483647;
+        background: transparent;
+        pointer-events: auto;
+      `;
+
+      const originalOverflow = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+
+      document.documentElement.appendChild(iframe);
+
+      function handleMessage(event) {
+        if (event.source !== iframe.contentWindow) return;
+
+        if (event.data.type === 'mindful-close') {
+          window.removeEventListener('message', handleMessage);
+          iframe.remove();
+          document.body.style.overflow = originalOverflow;
+          delete window.mindfulBrowsingInjected;
+          clearInterval(checkInterval);
+        }
+      }
+
+      window.addEventListener('message', handleMessage);
+
+      let checkInterval = setInterval(() => {
+        if (iframe.parentNode) {
+          iframe.style.zIndex = '2147483647';
+        } else {
+          clearInterval(checkInterval);
+        }
+      }, 100);
+    }
+
+    injectOverlay();
+  })();
+</file>
+
+<file path="icon.svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" fill="none"><rect width="128" height="128" fill="url(#a)" rx="24"/><path fill="#fff" fill-opacity=".9" d="M64 32c-17.673 0-32 14.327-32 32 0 17.673 14.327 32 32 32 17.673 0 32-14.327 32-32 0-17.673-14.327-32-32-32Zm0 56c-13.255 0-24-10.745-24-24s10.745-24 24-24 24 10.745 24 24-10.745 24-24 24Z"/><circle cx="64" cy="64" r="16" fill="#fff"/><defs><linearGradient id="a" x1="0" x2="128" y1="0" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#667eea"/><stop offset="1" stop-color="#764ba2"/></linearGradient></defs></svg>
+</file>
+
+<file path="manifest.json">
+{
+  "manifest_version": 3,
+  "name": "Mindful Browsing",
+  "version": "1.0",
+  "description": "Take a breath before accessing distracting websites",
+  "permissions": ["storage", "webNavigation", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["overlay.html", "overlay.css", "overlay.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+</file>
+
+<file path="overlay.css">
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  #mindful-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: fadeIn 0.5s ease-in;
+  }
+
+  .content {
+    text-align: center;
+    color: white;
+    max-width: 400px;
+    padding: 40px;
+  }
+
+  h1 {
+    font-size: 32px;
+    margin-bottom: 30px;
+    font-weight: 300;
+    opacity: 0;
+    animation: fadeIn 1s ease-in forwards, breathe 4s ease-in-out infinite;
+  }
+
+  .timer-container {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 30px;
+    position: relative;
+  }
+
+  .timer-container svg {
+    transform: rotate(-90deg);
+  }
+
+  .timer-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.3);
+    stroke-width: 8;
+  }
+
+  .timer-progress {
+    fill: none;
+    stroke: white;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 565.48;
+    stroke-dashoffset: 565.48;
+    transition: stroke-dashoffset 5s linear;
+  }
+
+  .timer-progress.active {
+    stroke-dashoffset: 0;
+  }
+
+  .timer-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 48px;
+    font-weight: 300;
+  }
+
+  .skip-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid white;
+    color: white;
+    padding: 12px 24px;
+    font-size: 16px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 20px;
+    outline: none;
+  }
+
+  .skip-button:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .info-text {
+    font-size: 16px;
+    opacity: 0.8;
+    margin-top: 20px;
+  }
+
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  /* Fade out animation */
+  #mindful-overlay.fade-out {
+    opacity: 0;
+    transition: opacity 0.5s ease-out;
+  }
+</file>
+
+<file path="overlay.html">
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <div id="mindful-overlay">
+      <div class="content">
+        <h1>Take a moment to breathe</h1>
+
+        <div class="timer-container">
+          <svg width="200" height="200">
+            <circle cx="100" cy="100" r="90" class="timer-bg" />
+            <circle cx="100" cy="100" r="90" class="timer-progress" />
+          </svg>
+          <div class="timer-text">5</div>
+        </div>
+
+        <button class="skip-button">Skip Timer</button>
+
+        <p class="info-text">
+          Close the tab now if you don't really need to visit this site
+        </p>
+      </div>
+    </div>
+
+    <script src="overlay.js"></script>
+  </body>
+</html>
+</file>
+
+<file path="overlay.js">
+(function() {
+    // Get settings from URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const settings = {
+      duration: parseInt(params.get('duration')) || 5,
+      showSkip: params.get('showSkip') === 'true',
+      gradientStart: params.get('gradientStart') || '#667eea',
+      gradientEnd: params.get('gradientEnd') || '#764ba2'
+    };
+
+    // Apply gradient colors
+    const overlay = document.getElementById('mindful-overlay');
+    overlay.style.background = `linear-gradient(135deg, ${settings.gradientStart} 0%, ${settings.gradientEnd} 100%)`;
+
+    // Hide skip button if needed
+    const skipButton = document.querySelector('.skip-button');
+    if (!settings.showSkip) {
+      skipButton.style.display = 'none';
+    }
+
+    // Update timer duration
+    const timerText = document.querySelector('.timer-text');
+    const progressCircle = document.querySelector('.timer-progress');
+
+    let secondsLeft = settings.duration;
+    timerText.textContent = secondsLeft;
+
+    // Update circle animation duration
+    progressCircle.style.transition = `stroke-dashoffset ${settings.duration}s linear`;
+
+    let timerInterval;
+
+    function startTimer() {
+      setTimeout(() => {
+        progressCircle.classList.add('active');
+      }, 100);
+
+      timerInterval = setInterval(() => {
+        secondsLeft--;
+        timerText.textContent = secondsLeft;
+
+        if (secondsLeft <= 0) {
+          clearInterval(timerInterval);
+          closeOverlay();
+        }
+      }, 1000);
+    }
+
+    function closeOverlay() {
+      overlay.classList.add('fade-out');
+
+      setTimeout(() => {
+        window.parent.postMessage({ type: 'mindful-close' }, '*');
+      }, 500);
+    }
+
+    skipButton.addEventListener('click', () => {
+      clearInterval(timerInterval);
+      closeOverlay();
+    });
+
+    startTimer();
+  })();
+</file>
+
+<file path="popup.css">
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 400px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    color: #2c3e50;
+}
+
+.container {
+    background: white;
+}
+
+/* Header */
+.header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 25px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.1);
+}
+
+.header h2 {
+    color: white;
+    font-size: 26px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+}
+
+.header .tagline {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+/* Main Content */
+.content {
+    padding: 20px;
+}
+
+/* Sections */
+.section {
+    margin-bottom: 24px;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.section:hover {
+    border-color: #667eea20;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.08);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Settings */
+.settings {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.setting-item {
+    background: white;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+}
+
+.setting-item:hover {
+    border-color: #667eea30;
+}
+
+.setting-item label {
+    font-size: 14px;
+    color: #495057;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.setting-item input[type="number"] {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: #f8f9fa;
+}
+
+.setting-item input[type="number"]:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+}
+
+/* Checkbox setting */
+.checkbox-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px;
+}
+
+.checkbox-setting label {
+    margin: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Custom checkbox */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .3s;
+    border-radius: 26px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+input:checked+.slider:before {
+    transform: translateX(22px);
+}
+
+/* Color settings */
+.color-settings {
+    padding: 14px;
+}
+
+.color-inputs {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.color-input-group {
+    flex: 1;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+}
+
+.color-input-group:hover {
+    border-color: #667eea30;
+}
+
+.color-input-group input[type="color"] {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: none;
+}
+
+.color-input-group span {
+    font-size: 13px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+/* Buttons */
+.save-button {
+    width: 100%;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.save-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.save-button:active {
+    transform: translateY(0);
+}
+
+.save-button.saved {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+}
+
+/* Add site section */
+.add-site {
+    display: flex;
+    gap: 10px;
+}
+
+#newSite {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: #f8f9fa;
+}
+
+#newSite:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+}
+
+#addButton {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+#addButton:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.error {
+    color: #dc3545;
+    font-size: 13px;
+    margin-top: 8px;
+    display: none;
+    font-weight: 500;
+}
+
+/* Sites list */
+.sites-list {
+    max-height: 240px;
+    overflow-y: auto;
+    margin: -8px;
+    padding: 8px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 30px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.empty-state::before {
+    content: "🧘";
+    display: block;
+    font-size: 32px;
+    margin-bottom: 10px;
+    opacity: 0.5;
+}
+
+.site-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.site-item:hover {
+    border-color: #667eea20;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.site-url {
+    font-size: 14px;
+    color: #495057;
+    font-weight: 500;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+}
+
+.remove-button {
+    padding: 6px 12px;
+    background: #dc354520;
+    color: #dc3545;
+    border: 1px solid #dc354530;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.remove-button:hover {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+/* Footer */
+.footer {
+    padding: 20px;
+    border-top: 1px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+.reset-button {
+    width: 100%;
+    padding: 10px 20px;
+    background: white;
+    color: #6c757d;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reset-button:hover {
+    border-color: #dc3545;
+    color: #dc3545;
+    background: #dc354510;
+}
+
+/* Scrollbar */
+.sites-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sites-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.sites-list::-webkit-scrollbar-thumb {
+    background: #c0c4cc;
+    border-radius: 4px;
+}
+
+.sites-list::-webkit-scrollbar-thumb:hover {
+    background: #a0a4ac;
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.section {
+    animation: slideIn 0.3s ease;
+}
+
+/* Auto-save feedback */
+.auto-save-feedback {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.auto-save-feedback.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+</file>
+
+<file path="popup.html">
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>Mindful Browsing</h2>
+        <p class="tagline">Take a breath before you browse</p>
+      </div>
+
+      <div class="content">
+        <!-- Settings Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Settings</h3>
+          </div>
+          <div class="settings">
+            <div class="setting-item">
+              <label for="timerDuration">Timer Duration (seconds)</label>
+              <input
+                type="number"
+                id="timerDuration"
+                min="1"
+                max="60"
+                value="5"
+              />
+            </div>
+
+            <div class="setting-item checkbox-setting">
+              <label for="showSkipButton">Show skip button</label>
+              <label class="switch">
+                <input type="checkbox" id="showSkipButton" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item color-settings">
+              <label>Background Gradient</label>
+              <div class="color-inputs">
+                <div class="color-input-group">
+                  <input type="color" id="gradientStart" value="#667eea" />
+                  <span>Start</span>
+                </div>
+                <div class="color-input-group">
+                  <input type="color" id="gradientEnd" value="#764ba2" />
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Website Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Add Website</h3>
+          </div>
+          <div class="add-site">
+            <input
+              type="text"
+              id="newSite"
+              placeholder="example.com or *.example.com"
+            />
+            <button id="addButton">Add</button>
+          </div>
+          <div id="error" class="error"></div>
+        </div>
+
+        <!-- Websites List Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Mindful Websites</h3>
+          </div>
+          <div id="sitesList" class="sites-list"></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button id="resetButton" class="reset-button">Reset Everything</button>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+</file>
+
+<file path="popup.js">
+// Default settings
+const DEFAULT_SETTINGS = {
+    timerDuration: 5,
+    showSkipButton: true,
+    gradientStart: "#667eea",
+    gradientEnd: "#764ba2",
+};
+
+const DEFAULT_SITES = [
+    "facebook.com",
+    "twitter.com",
+    "x.com",
+    "instagram.com",
+    "youtube.com",
+    "reddit.com",
+    "tiktok.com",
+];
+
+// Load settings
+async function loadSettings() {
+    const result = await chrome.storage.sync.get(["settings"]);
+    const settings = { ...DEFAULT_SETTINGS, ...result.settings };
+
+    document.getElementById("timerDuration").value = settings.timerDuration;
+    document.getElementById("showSkipButton").checked = settings.showSkipButton;
+    document.getElementById("gradientStart").value = settings.gradientStart;
+    document.getElementById("gradientEnd").value = settings.gradientEnd;
+
+    // Apply the gradient colors to UI elements
+    applyGradientColors(settings.gradientStart, settings.gradientEnd);
+}
+
+// Save settings
+async function saveSettings() {
+    const settings = {
+        timerDuration: parseInt(document.getElementById("timerDuration").value),
+        showSkipButton: document.getElementById("showSkipButton").checked,
+        gradientStart: document.getElementById("gradientStart").value,
+        gradientEnd: document.getElementById("gradientEnd").value,
+    };
+
+    await chrome.storage.sync.set({ settings });
+
+    // Apply the new gradient colors immediately
+    applyGradientColors(settings.gradientStart, settings.gradientEnd);
+
+    // Show subtle saved feedback
+    showSavedFeedback();
+}
+
+function showSavedFeedback() {
+    // Create or get existing feedback element
+    let feedback = document.getElementById('autoSaveFeedback');
+    if (!feedback) {
+        feedback = document.createElement('div');
+        feedback.id = 'autoSaveFeedback';
+        feedback.className = 'auto-save-feedback';
+        feedback.textContent = 'Settings saved';
+        document.querySelector('.content').appendChild(feedback);
+    }
+
+    // Show feedback
+    feedback.classList.add('show');
+
+    // Hide after delay
+    setTimeout(() => {
+        feedback.classList.remove('show');
+    }, 1500);
+}
+
+// Load and display sites
+async function loadSites() {
+    const result = await chrome.storage.sync.get(["mindfulSites"]);
+    const sites = result.mindfulSites || [];
+
+    const sitesList = document.getElementById("sitesList");
+    sitesList.innerHTML = "";
+
+    if (sites.length === 0) {
+        sitesList.innerHTML =
+            '<div class="empty-state">No websites added yet<br><small>Add some sites to get started!</small></div>';
+        return;
+    }
+
+    sites.forEach((site) => {
+        const siteItem = document.createElement("div");
+        siteItem.className = "site-item";
+
+        const siteUrl = document.createElement("span");
+        siteUrl.className = "site-url";
+        siteUrl.textContent = site;
+
+        const removeButton = document.createElement("button");
+        removeButton.className = "remove-button";
+        removeButton.textContent = "Remove";
+        removeButton.onclick = () => removeSite(site);
+
+        siteItem.appendChild(siteUrl);
+        siteItem.appendChild(removeButton);
+        sitesList.appendChild(siteItem);
+    });
+}
+
+// Add a new site
+async function addSite() {
+    const input = document.getElementById("newSite");
+    const errorDiv = document.getElementById("error");
+    const site = input.value.trim().toLowerCase();
+
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+
+    if (!site) {
+        showError("Please enter a website");
+        return;
+    }
+
+    if (!site.includes(".") && !site.includes("*")) {
+        showError("Please enter a valid domain (e.g., example.com)");
+        return;
+    }
+
+    const result = await chrome.storage.sync.get(["mindfulSites"]);
+    const sites = result.mindfulSites || [];
+
+    if (sites.includes(site)) {
+        showError("This website is already in your list");
+        return;
+    }
+
+    sites.push(site);
+    await chrome.storage.sync.set({ mindfulSites: sites });
+
+    input.value = "";
+    loadSites();
+}
+
+// Remove a site
+async function removeSite(siteToRemove) {
+    const result = await chrome.storage.sync.get(["mindfulSites"]);
+    const sites = result.mindfulSites || [];
+
+    const updatedSites = sites.filter((site) => site !== siteToRemove);
+    await chrome.storage.sync.set({ mindfulSites: updatedSites });
+
+    loadSites();
+}
+
+// Reset everything
+async function resetToDefaults() {
+    if (
+        confirm("This will reset all settings and websites to defaults. Continue?")
+    ) {
+        await chrome.storage.sync.set({
+            mindfulSites: DEFAULT_SITES,
+            settings: DEFAULT_SETTINGS,
+        });
+        loadSites();
+        loadSettings();
+    }
+}
+
+// Apply gradient colors to UI elements
+function applyGradientColors(gradientStart, gradientEnd) {
+    const gradient = `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`;
+
+    // Apply to header
+    const header = document.querySelector('.header');
+    if (header) header.style.background = gradient;
+
+    // Apply to buttons
+    const saveButton = document.getElementById('saveSettings');
+    if (saveButton) saveButton.style.background = gradient;
+
+    const addButton = document.getElementById('addButton');
+    if (addButton) addButton.style.background = gradient;
+
+    // Apply to section icons
+    const sectionIcons = document.querySelectorAll('.section-icon');
+    sectionIcons.forEach(icon => icon.style.background = gradient);
+
+    // Apply to checkbox slider when checked
+    const checkbox = document.getElementById('showSkipButton');
+    const slider = checkbox.nextElementSibling;
+
+    if (checkbox.checked) {
+        slider.style.background = gradient;
+    } else {
+        // Reset to default unchecked color
+        slider.style.background = '#ccc';
+    }
+
+    // Update CSS custom properties for dynamic elements
+    document.documentElement.style.setProperty('--gradient-start', gradientStart);
+    document.documentElement.style.setProperty('--gradient-end', gradientEnd);
+    document.documentElement.style.setProperty('--dynamic-gradient', gradient);
+}
+
+function setupRealTimePreview() {
+    const gradientStartInput = document.getElementById("gradientStart");
+    const gradientEndInput = document.getElementById("gradientEnd");
+
+    function updatePreview() {
+        applyGradientColors(gradientStartInput.value, gradientEndInput.value);
+    }
+
+    // Update preview in real-time as user drags color picker
+    gradientStartInput.addEventListener("input", updatePreview);
+    gradientEndInput.addEventListener("input", updatePreview);
+}
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.getElementById("error");
+    errorDiv.textContent = message;
+    errorDiv.style.display = "block";
+}
+
+let saveTimeout;
+
+function debouncedSave() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveSettings, 300); // Save 300ms after user stops changing
+}
+
+// Auto-save event listeners
+document.getElementById("timerDuration").addEventListener("input", saveSettings);
+document.getElementById("showSkipButton").addEventListener("change", saveSettings);
+document.getElementById("gradientStart").addEventListener("input", debouncedSave);
+document.getElementById("gradientEnd").addEventListener("input", debouncedSave);
+
+// Keep the add site functionality
+document.getElementById("addButton").addEventListener("click", addSite);
+document.getElementById("newSite").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+        addSite();
+    }
+});
+document.getElementById("resetButton").addEventListener("click", resetToDefaults);
+
+// Initialize
+setupRealTimePreview();
+loadSettings();
+loadSites();
+</file>
+
+</files>

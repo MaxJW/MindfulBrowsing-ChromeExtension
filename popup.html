@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>Mindful Browsing</h2>
+        <p class="tagline">Take a breath before you browse</p>
+      </div>
+
+      <div class="content">
+        <!-- Settings Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Settings</h3>
+          </div>
+          <div class="settings">
+            <div class="setting-item">
+              <label for="timerDuration">Timer Duration (seconds)</label>
+              <input
+                type="number"
+                id="timerDuration"
+                min="1"
+                max="60"
+                value="5"
+              />
+            </div>
+
+            <div class="setting-item checkbox-setting">
+              <label for="showSkipButton">Show skip button</label>
+              <label class="switch">
+                <input type="checkbox" id="showSkipButton" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item color-settings">
+              <label>Background Gradient</label>
+              <div class="color-inputs">
+                <div class="color-input-group">
+                  <input type="color" id="gradientStart" value="#667eea" />
+                  <span>Start</span>
+                </div>
+                <div class="color-input-group">
+                  <input type="color" id="gradientEnd" value="#764ba2" />
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Website Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Add Website</h3>
+          </div>
+          <div class="add-site">
+            <input
+              type="text"
+              id="newSite"
+              placeholder="example.com or *.example.com"
+            />
+            <button id="addButton">Add</button>
+          </div>
+          <div id="error" class="error"></div>
+        </div>
+
+        <!-- Websites List Section -->
+        <div class="section">
+          <div class="section-header">
+            <h3>Mindful Websites</h3>
+          </div>
+          <div id="sitesList" class="sites-list"></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button id="resetButton" class="reset-button">Reset Everything</button>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
