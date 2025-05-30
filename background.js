@@ -1,12 +1,10 @@
 // Default sites
 const DEFAULT_SITES = [
     'facebook.com',
-    'twitter.com',
     'x.com',
-    'instagram.com',
-    'youtube.com',
     'reddit.com',
-    'tiktok.com'
+    'instagram.com',
+    'youtube.com'
 ];
 
 // Track tabs that have already shown the timer
@@ -15,15 +13,17 @@ const processedTabs = new Set();
 // Track tabs with active timers
 const activeTimers = new Map();
 
+// Track tabs that should be exempted from timer (opened from same site)
+const exemptedTabs = new Set();
+
+// Track visited mindful sites per tab (tabId -> Set of domains)
+const tabMindfulHistory = new Map();
+
 // Initialize storage with default sites
 chrome.runtime.onInstalled.addListener(async () => {
     const result = await chrome.storage.sync.get(['mindfulSites', 'stats']);
-    if (!result.mindfulSites) {
-        await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
-    }
-    if (!result.stats) {
-        await chrome.storage.sync.set({ stats: { tabsClosed: 0 } });
-    }
+    if (!result.mindfulSites) await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
+    if (!result.stats) await chrome.storage.sync.set({ stats: { tabsClosed: 0 } });
 });
 
 // Get the current list of mindful sites
@@ -47,10 +47,83 @@ function matchesMindfulSite(url, mindfulSites) {
     });
 }
 
+// Extract the domain from a URL
+function getDomain(url) {
+    try {
+        return new URL(url).hostname.replace('www.', '').toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+// Check if a domain has been visited before in this tab
+function hasMindfulSiteBeenVisited(tabId, domain) {
+    const visitedSites = tabMindfulHistory.get(tabId);
+    return visitedSites && visitedSites.has(domain);
+}
+
+// Mark a mindful domain as visited in this tab
+function markMindfulSiteAsVisited(tabId, domain) {
+    if (!tabMindfulHistory.has(tabId)) tabMindfulHistory.set(tabId, new Set());
+    tabMindfulHistory.get(tabId).add(domain);
+    console.log(`Marked ${domain} as visited in tab ${tabId}`);
+}
+
+// Listen for tab creation to track same-domain openings
+chrome.tabs.onCreated.addListener(async (tab) => {
+    // Check if this tab has an opener
+    if (tab.openerTabId) {
+        try {
+            // Get the opener tab
+            const openerTab = await chrome.tabs.get(tab.openerTabId);
+            const mindfulSites = await getMindfulSites();
+
+            // Get domains for both tabs
+            const newTabDomain = getDomain(tab.url || tab.pendingUrl);
+            const openerTabDomain = getDomain(openerTab.url);
+
+            // If both tabs are from mindful sites, check if they're the same domain
+            if (newTabDomain && openerTabDomain) {
+                const newTabIsMindful = mindfulSites.some(site => {
+                    const pattern = site.toLowerCase().replace('www.', '');
+                    if (pattern.includes('*')) {
+                        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+                        return regex.test(newTabDomain);
+                    }
+                    return newTabDomain.includes(pattern) || newTabDomain === pattern;
+                });
+
+                const openerTabIsMindful = mindfulSites.some(site => {
+                    const pattern = site.toLowerCase().replace('www.', '');
+                    if (pattern.includes('*')) {
+                        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+                        return regex.test(openerTabDomain);
+                    }
+                    return openerTabDomain.includes(pattern) || openerTabDomain === pattern;
+                });
+
+                // If both are mindful sites and from the same domain, exempt the new tab
+                if (newTabIsMindful && openerTabIsMindful && newTabDomain === openerTabDomain) {
+                    exemptedTabs.add(tab.id);
+                }
+            }
+        } catch (error) {
+            console.error('Error checking opener tab:', error);
+        }
+    }
+});
+
+
 // Listen for navigation events
 chrome.webNavigation.onCommitted.addListener(async (details) => {
     // Only process main frame navigations
     if (details.frameId !== 0) return;
+
+    // Check if this tab is exempted from showing timer
+    if (exemptedTabs.has(details.tabId)) {
+        exemptedTabs.delete(details.tabId); // Clean up after use
+        return;
+    }
 
     // Check if we've already processed this tab
     const tabKey = `${details.tabId}-${details.url}`;
@@ -65,6 +138,14 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
         // Check if this is a mindful site
         if (matchesMindfulSite(url, mindfulSites)) {
+            const domain = getDomain(details.url);
+
+            // Check if this mindful domain has been visited before in this tab
+            if (hasMindfulSiteBeenVisited(details.tabId, domain)) return;
+
+            // Mark this domain as visited before showing the timer
+            markMindfulSiteAsVisited(details.tabId, domain);
+
             // Inject the content script
             await chrome.scripting.executeScript({
                 target: { tabId: details.tabId },
@@ -107,6 +188,12 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
         // Remove from active timers
         activeTimers.delete(tabId);
     }
+
+    // Clean up exempted tabs
+    exemptedTabs.delete(tabId);
+
+    // Clean up mindful history for this tab
+    tabMindfulHistory.delete(tabId);
 
     // Remove all entries for this tab
     const keysToRemove = [];

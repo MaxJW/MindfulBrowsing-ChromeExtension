@@ -1,9 +1,10 @@
 // Default settings
 const DEFAULT_SETTINGS = {
-    timerDuration: 5,
+    timerDuration: 6,
     showSkipButton: true,
     gradientStart: "#667eea",
     gradientEnd: "#764ba2",
+    customText: "Take a moment to breathe",
 };
 
 const DEFAULT_SITES = [
@@ -25,6 +26,7 @@ async function loadSettings() {
     document.getElementById("showSkipButton").checked = settings.showSkipButton;
     document.getElementById("gradientStart").value = settings.gradientStart;
     document.getElementById("gradientEnd").value = settings.gradientEnd;
+    document.getElementById("customText").value = settings.customText;
 
     // Apply the gradient colors to UI elements
     applyGradientColors(settings.gradientStart, settings.gradientEnd);
@@ -33,10 +35,11 @@ async function loadSettings() {
 // Save settings
 async function saveSettings() {
     const settings = {
-        timerDuration: parseInt(document.getElementById("timerDuration").value),
-        showSkipButton: document.getElementById("showSkipButton").checked,
-        gradientStart: document.getElementById("gradientStart").value,
-        gradientEnd: document.getElementById("gradientEnd").value,
+        timerDuration: parseInt(document.getElementById("timerDuration").value) || DEFAULT_SETTINGS.timerDuration,
+        showSkipButton: document.getElementById("showSkipButton").checked || DEFAULT_SETTINGS.showSkipButton,
+        gradientStart: document.getElementById("gradientStart").value || DEFAULT_SETTINGS.gradientStart,
+        gradientEnd: document.getElementById("gradientEnd").value || DEFAULT_SETTINGS.gradientEnd,
+        customText: document.getElementById("customText").value.trim() || DEFAULT_SETTINGS.customText,
     };
 
     await chrome.storage.sync.set({ settings });
@@ -162,10 +165,11 @@ async function removeSite(siteToRemove) {
 
 // Reset everything
 async function resetToDefaults() {
-    if (confirm("This will reset all settings and websites to defaults. Continue?")) {
+    if (confirm("This will reset all settings, websites, and statistics (you have been warned!). Continue?")) {
         await chrome.storage.sync.set({
             mindfulSites: DEFAULT_SITES,
             settings: DEFAULT_SETTINGS,
+            stats: { tabsClosed: 0 },
         });
         loadSites();
         loadSettings();
@@ -187,6 +191,9 @@ function applyGradientColors(gradientStart, gradientEnd) {
 
     const addButton = document.getElementById('addButton');
     if (addButton) addButton.style.background = gradient;
+
+    const statNumber = document.querySelector('.stat-number');
+    if (statNumber) statNumber.style.background = `${gradient} text`;
 
     // Apply to section icons
     const sectionIcons = document.querySelectorAll('.section-icon');
@@ -241,6 +248,7 @@ document.getElementById("timerDuration").addEventListener("input", saveSettings)
 document.getElementById("showSkipButton").addEventListener("change", saveSettings);
 document.getElementById("gradientStart").addEventListener("input", debouncedSave);
 document.getElementById("gradientEnd").addEventListener("input", debouncedSave);
+document.getElementById("customText").addEventListener("input", debouncedSave);
 
 // Keep the add site functionality
 document.getElementById("addButton").addEventListener("click", addSite);

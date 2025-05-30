@@ -15,6 +15,7 @@
             showSkipButton: true,
             gradientStart: '#667eea',
             gradientEnd: '#764ba2',
+            customText: 'Take a moment to breathe',
             ...result.settings
         };
 
@@ -31,7 +32,8 @@
             duration: settings.timerDuration,
             showSkip: settings.showSkipButton,
             gradientStart: settings.gradientStart,
-            gradientEnd: settings.gradientEnd
+            gradientEnd: settings.gradientEnd,
+            customText: settings.customText
         });
         iframe.src = chrome.runtime.getURL(`overlay.html?${params.toString()}`);
         iframe.style.cssText = `

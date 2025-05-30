@@ -5,8 +5,13 @@
         duration: parseInt(params.get('duration')) || 5,
         showSkip: params.get('showSkip') === 'true',
         gradientStart: params.get('gradientStart') || '#667eea',
-        gradientEnd: params.get('gradientEnd') || '#764ba2'
+        gradientEnd: params.get('gradientEnd') || '#764ba2',
+        customText: params.get('customText') || 'Take a moment to breathe'
     };
+
+    // Apply custom text to the title
+    const title = document.querySelector('h1');
+    if (title) title.textContent = settings.customText;
 
     // Apply gradient colors
     const overlay = document.getElementById('mindful-overlay');
@@ -14,9 +19,7 @@
 
     // Hide skip button if needed
     const skipButton = document.querySelector('.skip-button');
-    if (!settings.showSkip) {
-        skipButton.style.display = 'none';
-    }
+    if (!settings.showSkip) skipButton.style.display = 'none';
 
     // Update timer duration
     const timerText = document.querySelector('.timer-text');

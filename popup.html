@@ -14,16 +14,13 @@
       <div class="content">
         <!-- Stats Section -->
         <div class="section stats-section">
-          <div class="section-header">
-            <h3>Your Mindful Moments</h3>
-          </div>
           <div class="stats-container">
             <div class="stat-item">
               <div class="stat-number" id="tabsClosedCount">0</div>
-              <div class="stat-label">Tabs closed during timer</div>
+              <div class="stat-label">Distractions Prevented</div>
             </div>
             <div class="stat-description">
-              Great job! Each closed tab represents a moment of mindfulness.
+              Great job! Each closed tab represents another distraction avoided.
             </div>
           </div>
         </div>
@@ -34,6 +31,30 @@
             <h3>Settings</h3>
           </div>
           <div class="settings">
+            <div class="setting-item color-settings">
+              <label>Background Gradient</label>
+              <div class="color-inputs">
+                <div class="color-input-group">
+                  <input type="color" id="gradientStart" value="#667eea" />
+                  <span>Start</span>
+                </div>
+                <div class="color-input-group">
+                  <input type="color" id="gradientEnd" value="#764ba2" />
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label for="customText">Overlay Message</label>
+              <input
+                type="text"
+                id="customText"
+                placeholder="Take a moment to breathe"
+                maxlength="50"
+              />
+            </div>
+
             <div class="setting-item">
               <label for="timerDuration">Timer Duration (seconds)</label>
               <input
@@ -51,20 +72,6 @@
                 <input type="checkbox" id="showSkipButton" checked />
                 <span class="slider"></span>
               </label>
-            </div>
-
-            <div class="setting-item color-settings">
-              <label>Background Gradient</label>
-              <div class="color-inputs">
-                <div class="color-input-group">
-                  <input type="color" id="gradientStart" value="#667eea" />
-                  <span>Start</span>
-                </div>
-                <div class="color-input-group">
-                  <input type="color" id="gradientEnd" value="#764ba2" />
-                  <span>End</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -96,6 +103,10 @@
 
       <div class="footer">
         <button id="resetButton" class="reset-button">Reset Everything</button>
+        <p class="footer-text">
+          Developed by
+          <a href="https://maxwilson.co.uk" target="_blank">Max Wilson</a>
+        </p>
       </div>
     </div>
 

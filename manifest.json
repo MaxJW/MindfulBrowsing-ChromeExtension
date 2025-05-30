@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Mindful Browsing",
   "version": "1.0",
-  "description": "Take a breath before accessing distracting websites",
-  "permissions": ["storage", "webNavigation", "scripting"],
+  "description": "Take a moment before accessing distracting websites",
+  "permissions": ["storage", "webNavigation", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

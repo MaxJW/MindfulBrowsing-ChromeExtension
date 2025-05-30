@@ -32,6 +32,7 @@
     font-weight: 300;
     opacity: 0;
     animation: fadeIn 1s ease-in forwards, breathe 4s ease-in-out infinite;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.5);
   }
 
   .timer-container {
@@ -43,6 +44,7 @@
 
   .timer-container svg {
     transform: rotate(-90deg);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
   }
 
   .timer-bg {
@@ -72,6 +74,7 @@
     transform: translate(-50%, -50%);
     font-size: 48px;
     font-weight: 300;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.6);
   }
 
   .skip-button {
@@ -85,17 +88,21 @@
     transition: all 0.3s ease;
     margin-top: 20px;
     outline: none;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 
   .skip-button:hover {
     background: rgba(255, 255, 255, 0.3);
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 
   .info-text {
     font-size: 16px;
     opacity: 0.8;
     margin-top: 20px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   }
 
   @keyframes fadeIn {

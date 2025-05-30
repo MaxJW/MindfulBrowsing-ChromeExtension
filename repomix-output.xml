@@ -55,170 +55,6 @@ popup.js
 <files>
 This section contains the contents of the repository's files.
 
-<file path="background.js">
-// Default sites
-const DEFAULT_SITES = [
-    'facebook.com',
-    'twitter.com',
-    'x.com',
-    'instagram.com',
-    'youtube.com',
-    'reddit.com',
-    'tiktok.com'
-  ];
-
-  // Track tabs that have already shown the timer
-  const processedTabs = new Set();
-
-  // Initialize storage with default sites
-  chrome.runtime.onInstalled.addListener(async () => {
-    const result = await chrome.storage.sync.get(['mindfulSites']);
-    if (!result.mindfulSites) {
-      await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
-    }
-  });
-
-  // Get the current list of mindful sites
-  async function getMindfulSites() {
-    const result = await chrome.storage.sync.get(['mindfulSites']);
-    return result.mindfulSites || DEFAULT_SITES;
-  }
-
-  // Check if a URL matches any mindful site
-  function matchesMindfulSite(url, mindfulSites) {
-    const hostname = url.hostname.replace('www.', '').toLowerCase();
-    return mindfulSites.some(site => {
-      const pattern = site.toLowerCase().replace('www.', '');
-      // Support wildcards
-      if (pattern.includes('*')) {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-        return regex.test(hostname);
-      }
-      // Check if hostname includes the pattern
-      return hostname.includes(pattern) || hostname === pattern;
-    });
-  }
-
-  // Listen for navigation events
-  chrome.webNavigation.onCommitted.addListener(async (details) => {
-    // Only process main frame navigations
-    if (details.frameId !== 0) return;
-
-    // Check if we've already processed this tab
-    const tabKey = `${details.tabId}-${details.url}`;
-    if (processedTabs.has(tabKey)) {
-      processedTabs.delete(tabKey);
-      return;
-    }
-
-    try {
-      const url = new URL(details.url);
-      const mindfulSites = await getMindfulSites();
-
-      // Check if this is a mindful site
-      if (matchesMindfulSite(url, mindfulSites)) {
-        // Inject the content script
-        await chrome.scripting.executeScript({
-          target: { tabId: details.tabId },
-          files: ['content.js'],
-          injectImmediately: true
-        });
-
-        // Mark this tab as processed
-        processedTabs.add(tabKey);
-      }
-    } catch (error) {
-      console.error('Error processing navigation:', error);
-    }
-  });
-
-  // Clean up processed tabs when they're closed
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    const keysToRemove = [];
-    for (const key of processedTabs) {
-      if (key.startsWith(`${tabId}-`)) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach(key => processedTabs.delete(key));
-  });
-</file>
-
-<file path="content.js">
-(function() {
-    if (window.mindfulBrowsingInjected) return;
-    window.mindfulBrowsingInjected = true;
-
-    async function injectOverlay() {
-      if (!document.body) {
-        setTimeout(injectOverlay, 10);
-        return;
-      }
-
-      // Get settings
-      const result = await chrome.storage.sync.get(['settings']);
-      const settings = {
-        timerDuration: 5,
-        showSkipButton: true,
-        gradientStart: '#667eea',
-        gradientEnd: '#764ba2',
-        ...result.settings
-      };
-
-      // Create iframe with settings as URL parameters
-      const iframe = document.createElement('iframe');
-      iframe.id = 'mindful-overlay-iframe';
-      const params = new URLSearchParams({
-        duration: settings.timerDuration,
-        showSkip: settings.showSkipButton,
-        gradientStart: settings.gradientStart,
-        gradientEnd: settings.gradientEnd
-      });
-      iframe.src = chrome.runtime.getURL(`overlay.html?${params.toString()}`);
-      iframe.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        border: none;
-        z-index: 2147483647;
-        background: transparent;
-        pointer-events: auto;
-      `;
-
-      const originalOverflow = document.body.style.overflow || '';
-      document.body.style.overflow = 'hidden';
-
-      document.documentElement.appendChild(iframe);
-
-      function handleMessage(event) {
-        if (event.source !== iframe.contentWindow) return;
-
-        if (event.data.type === 'mindful-close') {
-          window.removeEventListener('message', handleMessage);
-          iframe.remove();
-          document.body.style.overflow = originalOverflow;
-          delete window.mindfulBrowsingInjected;
-          clearInterval(checkInterval);
-        }
-      }
-
-      window.addEventListener('message', handleMessage);
-
-      let checkInterval = setInterval(() => {
-        if (iframe.parentNode) {
-          iframe.style.zIndex = '2147483647';
-        } else {
-          clearInterval(checkInterval);
-        }
-      }, 100);
-    }
-
-    injectOverlay();
-  })();
-</file>
-
 <file path="icon.svg">
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" fill="none"><rect width="128" height="128" fill="url(#a)" rx="24"/><path fill="#fff" fill-opacity=".9" d="M64 32c-17.673 0-32 14.327-32 32 0 17.673 14.327 32 32 32 17.673 0 32-14.327 32-32 0-17.673-14.327-32-32-32Zm0 56c-13.255 0-24-10.745-24-24s10.745-24 24-24 24 10.745 24 24-10.745 24-24 24Z"/><circle cx="64" cy="64" r="16" fill="#fff"/><defs><linearGradient id="a" x1="0" x2="128" y1="0" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#667eea"/><stop offset="1" stop-color="#764ba2"/></linearGradient></defs></svg>
 </file>
@@ -228,7 +64,7 @@ const DEFAULT_SITES = [
   "manifest_version": 3,
   "name": "Mindful Browsing",
   "version": "1.0",
-  "description": "Take a breath before accessing distracting websites",
+  "description": "Take a moment before accessing distracting websites",
   "permissions": ["storage", "webNavigation", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -408,15 +244,221 @@ const DEFAULT_SITES = [
 </html>
 </file>
 
+<file path="background.js">
+// Default sites
+const DEFAULT_SITES = [
+    'facebook.com',
+    'x.com',
+    'reddit.com',
+    'instagram.com',
+    'youtube.com'
+];
+
+// Track tabs that have already shown the timer
+const processedTabs = new Set();
+
+// Track tabs with active timers
+const activeTimers = new Map();
+
+// Initialize storage with default sites
+chrome.runtime.onInstalled.addListener(async () => {
+    const result = await chrome.storage.sync.get(['mindfulSites', 'stats']);
+    if (!result.mindfulSites) {
+        await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
+    }
+    if (!result.stats) {
+        await chrome.storage.sync.set({ stats: { tabsClosed: 0 } });
+    }
+});
+
+// Get the current list of mindful sites
+async function getMindfulSites() {
+    const result = await chrome.storage.sync.get(['mindfulSites']);
+    return result.mindfulSites || DEFAULT_SITES;
+}
+
+// Check if a URL matches any mindful site
+function matchesMindfulSite(url, mindfulSites) {
+    const hostname = url.hostname.replace('www.', '').toLowerCase();
+    return mindfulSites.some(site => {
+        const pattern = site.toLowerCase().replace('www.', '');
+        // Support wildcards
+        if (pattern.includes('*')) {
+            const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+            return regex.test(hostname);
+        }
+        // Check if hostname includes the pattern
+        return hostname.includes(pattern) || hostname === pattern;
+    });
+}
+
+// Listen for navigation events
+chrome.webNavigation.onCommitted.addListener(async (details) => {
+    // Only process main frame navigations
+    if (details.frameId !== 0) return;
+
+    // Check if we've already processed this tab
+    const tabKey = `${details.tabId}-${details.url}`;
+    if (processedTabs.has(tabKey)) {
+        processedTabs.delete(tabKey);
+        return;
+    }
+
+    try {
+        const url = new URL(details.url);
+        const mindfulSites = await getMindfulSites();
+
+        // Check if this is a mindful site
+        if (matchesMindfulSite(url, mindfulSites)) {
+            // Inject the content script
+            await chrome.scripting.executeScript({
+                target: { tabId: details.tabId },
+                files: ['content.js'],
+                injectImmediately: true
+            });
+
+            // Mark this tab as processed
+            processedTabs.add(tabKey);
+        }
+    } catch (error) {
+        console.error('Error processing navigation:', error);
+    }
+});
+
+// Listen for messages from content script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === 'timer-started') {
+        // Track that this tab has an active timer
+        activeTimers.set(sender.tab.id, {
+            startTime: Date.now(),
+            duration: request.duration
+        });
+    } else if (request.type === 'timer-completed' || request.type === 'timer-skipped') {
+        // Remove from active timers
+        activeTimers.delete(sender.tab.id);
+    }
+});
+
+// Clean up processed tabs and check for active timers when they're closed
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+    // Check if this tab had an active timer
+    if (activeTimers.has(tabId)) {
+        // Increment the counter
+        const result = await chrome.storage.sync.get(['stats']);
+        const stats = result.stats || { tabsClosed: 0 };
+        stats.tabsClosed++;
+        await chrome.storage.sync.set({ stats });
+
+        // Remove from active timers
+        activeTimers.delete(tabId);
+    }
+
+    // Remove all entries for this tab
+    const keysToRemove = [];
+    for (const key of processedTabs) {
+        if (key.startsWith(`${tabId}-`)) {
+            keysToRemove.push(key);
+        }
+    }
+    keysToRemove.forEach(key => processedTabs.delete(key));
+});
+</file>
+
+<file path="content.js">
+(function () {
+    if (window.mindfulBrowsingInjected) return;
+    window.mindfulBrowsingInjected = true;
+
+    async function injectOverlay() {
+        if (!document.body) {
+            setTimeout(injectOverlay, 10);
+            return;
+        }
+
+        // Get settings
+        const result = await chrome.storage.sync.get(['settings']);
+        const settings = {
+            timerDuration: 5,
+            showSkipButton: true,
+            gradientStart: '#667eea',
+            gradientEnd: '#764ba2',
+            ...result.settings
+        };
+
+        // Notify background script that timer has started
+        chrome.runtime.sendMessage({
+            type: 'timer-started',
+            duration: settings.timerDuration
+        });
+
+        // Create iframe with settings as URL parameters
+        const iframe = document.createElement('iframe');
+        iframe.id = 'mindful-overlay-iframe';
+        const params = new URLSearchParams({
+            duration: settings.timerDuration,
+            showSkip: settings.showSkipButton,
+            gradientStart: settings.gradientStart,
+            gradientEnd: settings.gradientEnd
+        });
+        iframe.src = chrome.runtime.getURL(`overlay.html?${params.toString()}`);
+        iframe.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            z-index: 2147483647;
+            background: transparent;
+            pointer-events: auto;
+        `;
+
+        const originalOverflow = document.body.style.overflow || '';
+        document.body.style.overflow = 'hidden';
+
+        document.documentElement.appendChild(iframe);
+
+        function handleMessage(event) {
+            if (event.source !== iframe.contentWindow) return;
+
+            if (event.data.type === 'mindful-close') {
+                // Notify background script based on how the timer ended
+                chrome.runtime.sendMessage({
+                    type: event.data.reason === 'completed' ? 'timer-completed' : 'timer-skipped'
+                });
+
+                window.removeEventListener('message', handleMessage);
+                iframe.remove();
+                document.body.style.overflow = originalOverflow;
+                delete window.mindfulBrowsingInjected;
+                clearInterval(checkInterval);
+            }
+        }
+
+        window.addEventListener('message', handleMessage);
+
+        let checkInterval = setInterval(() => {
+            if (iframe.parentNode) {
+                iframe.style.zIndex = '2147483647';
+            } else {
+                clearInterval(checkInterval);
+            }
+        }, 100);
+    }
+
+    injectOverlay();
+})();
+</file>
+
 <file path="overlay.js">
-(function() {
+(function () {
     // Get settings from URL parameters
     const params = new URLSearchParams(window.location.search);
     const settings = {
-      duration: parseInt(params.get('duration')) || 5,
-      showSkip: params.get('showSkip') === 'true',
-      gradientStart: params.get('gradientStart') || '#667eea',
-      gradientEnd: params.get('gradientEnd') || '#764ba2'
+        duration: parseInt(params.get('duration')) || 5,
+        showSkip: params.get('showSkip') === 'true',
+        gradientStart: params.get('gradientStart') || '#667eea',
+        gradientEnd: params.get('gradientEnd') || '#764ba2'
     };
 
     // Apply gradient colors
@@ -426,7 +468,7 @@ const DEFAULT_SITES = [
     // Hide skip button if needed
     const skipButton = document.querySelector('.skip-button');
     if (!settings.showSkip) {
-      skipButton.style.display = 'none';
+        skipButton.style.display = 'none';
     }
 
     // Update timer duration
@@ -442,36 +484,36 @@ const DEFAULT_SITES = [
     let timerInterval;
 
     function startTimer() {
-      setTimeout(() => {
-        progressCircle.classList.add('active');
-      }, 100);
+        setTimeout(() => {
+            progressCircle.classList.add('active');
+        }, 100);
 
-      timerInterval = setInterval(() => {
-        secondsLeft--;
-        timerText.textContent = secondsLeft;
+        timerInterval = setInterval(() => {
+            secondsLeft--;
+            timerText.textContent = secondsLeft;
 
-        if (secondsLeft <= 0) {
-          clearInterval(timerInterval);
-          closeOverlay();
-        }
-      }, 1000);
+            if (secondsLeft <= 0) {
+                clearInterval(timerInterval);
+                closeOverlay('completed');
+            }
+        }, 1000);
     }
 
-    function closeOverlay() {
-      overlay.classList.add('fade-out');
+    function closeOverlay(reason = 'skipped') {
+        overlay.classList.add('fade-out');
 
-      setTimeout(() => {
-        window.parent.postMessage({ type: 'mindful-close' }, '*');
-      }, 500);
+        setTimeout(() => {
+            window.parent.postMessage({ type: 'mindful-close', reason: reason }, '*');
+        }, 500);
     }
 
     skipButton.addEventListener('click', () => {
-      clearInterval(timerInterval);
-      closeOverlay();
+        clearInterval(timerInterval);
+        closeOverlay('skipped');
     });
 
     startTimer();
-  })();
+})();
 </file>
 
 <file path="popup.css">
@@ -839,6 +881,16 @@ input:checked+.slider:before {
     padding: 20px;
     border-top: 1px solid #e9ecef;
     background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.footer-text {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: center;
 }
 
 .reset-button {
@@ -918,6 +970,57 @@ input:checked+.slider:before {
     opacity: 1;
     transform: translateY(0);
 }
+
+/* Stats Section */
+.stats-section {
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border: 2px solid #667eea20;
+}
+
+.stats-container {
+    text-align: center;
+    padding: 10px 0;
+}
+
+.stat-item {
+    margin-bottom: 15px;
+}
+
+.stat-number {
+    font-size: 48px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.stat-label {
+    font-size: 16px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.stat-description {
+    font-size: 13px;
+    color: #6c757d;
+    line-height: 1.5;
+    margin-top: 12px;
+    padding: 0 20px;
+}
+
+/* Animate number changes */
+.stat-number.updating {
+    animation: numberPulse 0.6s ease;
+}
+
+@keyframes numberPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
 </file>
 
 <file path="popup.html">
@@ -935,12 +1038,39 @@ input:checked+.slider:before {
       </div>
 
       <div class="content">
+        <!-- Stats Section -->
+        <div class="section stats-section">
+          <div class="stats-container">
+            <div class="stat-item">
+              <div class="stat-number" id="tabsClosedCount">0</div>
+              <div class="stat-label">Distractions Prevented</div>
+            </div>
+            <div class="stat-description">
+              Great job! Each closed tab represents another distraction avoided.
+            </div>
+          </div>
+        </div>
+
         <!-- Settings Section -->
         <div class="section">
           <div class="section-header">
             <h3>Settings</h3>
           </div>
           <div class="settings">
+            <div class="setting-item color-settings">
+              <label>Background Gradient</label>
+              <div class="color-inputs">
+                <div class="color-input-group">
+                  <input type="color" id="gradientStart" value="#667eea" />
+                  <span>Start</span>
+                </div>
+                <div class="color-input-group">
+                  <input type="color" id="gradientEnd" value="#764ba2" />
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+
             <div class="setting-item">
               <label for="timerDuration">Timer Duration (seconds)</label>
               <input
@@ -958,20 +1088,6 @@ input:checked+.slider:before {
                 <input type="checkbox" id="showSkipButton" checked />
                 <span class="slider"></span>
               </label>
-            </div>
-
-            <div class="setting-item color-settings">
-              <label>Background Gradient</label>
-              <div class="color-inputs">
-                <div class="color-input-group">
-                  <input type="color" id="gradientStart" value="#667eea" />
-                  <span>Start</span>
-                </div>
-                <div class="color-input-group">
-                  <input type="color" id="gradientEnd" value="#764ba2" />
-                  <span>End</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1003,6 +1119,10 @@ input:checked+.slider:before {
 
       <div class="footer">
         <button id="resetButton" class="reset-button">Reset Everything</button>
+        <p class="footer-text">
+          Developed by
+          <a href="https://maxwilson.co.uk" target="_blank">Max Wilson</a>
+        </p>
       </div>
     </div>
 
@@ -1014,7 +1134,7 @@ input:checked+.slider:before {
 <file path="popup.js">
 // Default settings
 const DEFAULT_SETTINGS = {
-    timerDuration: 5,
+    timerDuration: 6,
     showSkipButton: true,
     gradientStart: "#667eea",
     gradientEnd: "#764ba2",
@@ -1115,6 +1235,20 @@ async function loadSites() {
     });
 }
 
+async function loadStats() {
+    const result = await chrome.storage.sync.get(['stats']);
+    const stats = result.stats || { tabsClosed: 0 };
+
+    const countElement = document.getElementById('tabsClosedCount');
+    const currentCount = parseInt(countElement.textContent);
+
+    if (currentCount !== stats.tabsClosed) {
+        countElement.textContent = stats.tabsClosed;
+        countElement.classList.add('updating');
+        setTimeout(() => countElement.classList.remove('updating'), 600);
+    }
+}
+
 // Add a new site
 async function addSite() {
     const input = document.getElementById("newSite");
@@ -1162,15 +1296,15 @@ async function removeSite(siteToRemove) {
 
 // Reset everything
 async function resetToDefaults() {
-    if (
-        confirm("This will reset all settings and websites to defaults. Continue?")
-    ) {
+    if (confirm("This will reset all settings, websites, and statistics (you have been warned!). Continue?")) {
         await chrome.storage.sync.set({
             mindfulSites: DEFAULT_SITES,
             settings: DEFAULT_SETTINGS,
+            stats: { tabsClosed: 0 },
         });
         loadSites();
         loadSettings();
+        loadStats();
     }
 }
 
@@ -1256,6 +1390,13 @@ document.getElementById("resetButton").addEventListener("click", resetToDefaults
 setupRealTimePreview();
 loadSettings();
 loadSites();
+loadStats();
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync' && changes.stats) {
+        loadStats();
+    }
+});
 </file>
 
 </files>
