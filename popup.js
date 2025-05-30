@@ -101,6 +101,20 @@ async function loadSites() {
     });
 }
 
+async function loadStats() {
+    const result = await chrome.storage.sync.get(['stats']);
+    const stats = result.stats || { tabsClosed: 0 };
+
+    const countElement = document.getElementById('tabsClosedCount');
+    const currentCount = parseInt(countElement.textContent);
+
+    if (currentCount !== stats.tabsClosed) {
+        countElement.textContent = stats.tabsClosed;
+        countElement.classList.add('updating');
+        setTimeout(() => countElement.classList.remove('updating'), 600);
+    }
+}
+
 // Add a new site
 async function addSite() {
     const input = document.getElementById("newSite");
@@ -148,15 +162,14 @@ async function removeSite(siteToRemove) {
 
 // Reset everything
 async function resetToDefaults() {
-    if (
-        confirm("This will reset all settings and websites to defaults. Continue?")
-    ) {
+    if (confirm("This will reset all settings and websites to defaults. Continue?")) {
         await chrome.storage.sync.set({
             mindfulSites: DEFAULT_SITES,
             settings: DEFAULT_SETTINGS,
         });
         loadSites();
         loadSettings();
+        loadStats();
     }
 }
 
@@ -242,3 +255,10 @@ document.getElementById("resetButton").addEventListener("click", resetToDefaults
 setupRealTimePreview();
 loadSettings();
 loadSites();
+loadStats();
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync' && changes.stats) {
+        loadStats();
+    }
+});

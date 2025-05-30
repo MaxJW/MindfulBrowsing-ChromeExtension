@@ -1,11 +1,11 @@
-(function() {
+(function () {
     // Get settings from URL parameters
     const params = new URLSearchParams(window.location.search);
     const settings = {
-      duration: parseInt(params.get('duration')) || 5,
-      showSkip: params.get('showSkip') === 'true',
-      gradientStart: params.get('gradientStart') || '#667eea',
-      gradientEnd: params.get('gradientEnd') || '#764ba2'
+        duration: parseInt(params.get('duration')) || 5,
+        showSkip: params.get('showSkip') === 'true',
+        gradientStart: params.get('gradientStart') || '#667eea',
+        gradientEnd: params.get('gradientEnd') || '#764ba2'
     };
 
     // Apply gradient colors
@@ -15,7 +15,7 @@
     // Hide skip button if needed
     const skipButton = document.querySelector('.skip-button');
     if (!settings.showSkip) {
-      skipButton.style.display = 'none';
+        skipButton.style.display = 'none';
     }
 
     // Update timer duration
@@ -31,33 +31,33 @@
     let timerInterval;
 
     function startTimer() {
-      setTimeout(() => {
-        progressCircle.classList.add('active');
-      }, 100);
+        setTimeout(() => {
+            progressCircle.classList.add('active');
+        }, 100);
 
-      timerInterval = setInterval(() => {
-        secondsLeft--;
-        timerText.textContent = secondsLeft;
+        timerInterval = setInterval(() => {
+            secondsLeft--;
+            timerText.textContent = secondsLeft;
 
-        if (secondsLeft <= 0) {
-          clearInterval(timerInterval);
-          closeOverlay();
-        }
-      }, 1000);
+            if (secondsLeft <= 0) {
+                clearInterval(timerInterval);
+                closeOverlay('completed');
+            }
+        }, 1000);
     }
 
-    function closeOverlay() {
-      overlay.classList.add('fade-out');
+    function closeOverlay(reason = 'skipped') {
+        overlay.classList.add('fade-out');
 
-      setTimeout(() => {
-        window.parent.postMessage({ type: 'mindful-close' }, '*');
-      }, 500);
+        setTimeout(() => {
+            window.parent.postMessage({ type: 'mindful-close', reason: reason }, '*');
+        }, 500);
     }
 
     skipButton.addEventListener('click', () => {
-      clearInterval(timerInterval);
-      closeOverlay();
+        clearInterval(timerInterval);
+        closeOverlay('skipped');
     });
 
     startTimer();
-  })();
+})();
