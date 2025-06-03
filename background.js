@@ -19,11 +19,18 @@ const exemptedTabs = new Set();
 // Track visited mindful sites per tab (tabId -> Set of domains)
 const tabMindfulHistory = new Map();
 
+// Track original mute state of tabs before we mute them
+const originalMuteStates = new Map();
+
 // Initialize storage with default sites
 chrome.runtime.onInstalled.addListener(async () => {
     const result = await chrome.storage.sync.get(['mindfulSites', 'stats']);
-    if (!result.mindfulSites) await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
-    if (!result.stats) await chrome.storage.sync.set({ stats: { tabsClosed: 0 } });
+    if (!result.mindfulSites) {
+        await chrome.storage.sync.set({ mindfulSites: DEFAULT_SITES });
+    }
+    if (!result.stats) {
+        await chrome.storage.sync.set({ stats: { tabsClosed: 0 } });
+    }
 });
 
 // Get the current list of mindful sites
@@ -47,7 +54,7 @@ function matchesMindfulSite(url, mindfulSites) {
     });
 }
 
-// Extract the domain from a URL
+// Extract domain from URL
 function getDomain(url) {
     try {
         return new URL(url).hostname.replace('www.', '').toLowerCase();
@@ -64,12 +71,45 @@ function hasMindfulSiteBeenVisited(tabId, domain) {
 
 // Mark a mindful domain as visited in this tab
 function markMindfulSiteAsVisited(tabId, domain) {
-    if (!tabMindfulHistory.has(tabId)) tabMindfulHistory.set(tabId, new Set());
+    if (!tabMindfulHistory.has(tabId)) {
+        tabMindfulHistory.set(tabId, new Set());
+    }
     tabMindfulHistory.get(tabId).add(domain);
     console.log(`Marked ${domain} as visited in tab ${tabId}`);
 }
 
-// Listen for tab creation to track same-domain openings
+// Mute a tab and store its original state
+async function muteTab(tabId) {
+    try {
+        // Get current tab info to check original mute state
+        const tab = await chrome.tabs.get(tabId);
+
+        // Store the original mute state
+        originalMuteStates.set(tabId, tab.mutedInfo?.muted || false);
+
+        // Mute the tab
+        await chrome.tabs.update(tabId, { muted: true });
+        console.log(`Muted tab ${tabId} (was ${tab.mutedInfo?.muted ? 'muted' : 'unmuted'})`);
+    } catch (error) {
+        console.error('Error muting tab:', error);
+    }
+}
+
+// Restore original mute state of a tab
+async function restoreTabMuteState(tabId) {
+    try {
+        const originalState = originalMuteStates.get(tabId);
+        if (originalState !== undefined) {
+            await chrome.tabs.update(tabId, { muted: originalState });
+            console.log(`Restored tab ${tabId} mute state to: ${originalState ? 'muted' : 'unmuted'}`);
+            originalMuteStates.delete(tabId);
+        }
+    } catch (error) {
+        console.error('Error restoring tab mute state:', error);
+    }
+}
+
+// Listen for tab creation to track same-site openings
 chrome.tabs.onCreated.addListener(async (tab) => {
     // Check if this tab has an opener
     if (tab.openerTabId) {
@@ -105,6 +145,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
                 // If both are mindful sites and from the same domain, exempt the new tab
                 if (newTabIsMindful && openerTabIsMindful && newTabDomain === openerTabDomain) {
                     exemptedTabs.add(tab.id);
+                    console.log(`Tab ${tab.id} exempted from timer (opened from same site: ${newTabDomain})`);
                 }
             }
         } catch (error) {
@@ -113,7 +154,6 @@ chrome.tabs.onCreated.addListener(async (tab) => {
     }
 });
 
-
 // Listen for navigation events
 chrome.webNavigation.onCommitted.addListener(async (details) => {
     // Only process main frame navigations
@@ -121,6 +161,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
     // Check if this tab is exempted from showing timer
     if (exemptedTabs.has(details.tabId)) {
+        console.log(`Skipping timer for exempted tab ${details.tabId}`);
         exemptedTabs.delete(details.tabId); // Clean up after use
         return;
     }
@@ -141,7 +182,10 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
             const domain = getDomain(details.url);
 
             // Check if this mindful domain has been visited before in this tab
-            if (hasMindfulSiteBeenVisited(details.tabId, domain)) return;
+            if (hasMindfulSiteBeenVisited(details.tabId, domain)) {
+                console.log(`Skipping timer for ${domain} in tab ${details.tabId} (previously visited)`);
+                return;
+            }
 
             // Mark this domain as visited before showing the timer
             markMindfulSiteAsVisited(details.tabId, domain);
@@ -169,9 +213,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             startTime: Date.now(),
             duration: request.duration
         });
+
+        // Mute the tab when timer starts
+        muteTab(sender.tab.id);
     } else if (request.type === 'timer-completed' || request.type === 'timer-skipped') {
         // Remove from active timers
         activeTimers.delete(sender.tab.id);
+
+        // Restore original mute state when timer ends
+        restoreTabMuteState(sender.tab.id);
     }
 });
 
@@ -192,8 +242,11 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     // Clean up exempted tabs
     exemptedTabs.delete(tabId);
 
-    // Clean up mindful history for this tab
+    // Clean up tab history tracking
     tabMindfulHistory.delete(tabId);
+
+    // Clean up mute state tracking
+    originalMuteStates.delete(tabId);
 
     // Remove all entries for this tab
     const keysToRemove = [];
